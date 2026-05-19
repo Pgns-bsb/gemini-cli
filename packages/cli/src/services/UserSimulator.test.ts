@@ -191,9 +191,9 @@ describe('UserSimulator', () => {
   });
 
   it('should terminate if terminal state does not change after 3 consecutive inputs', async () => {
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
-      return undefined as never;
-    });
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation(() => undefined as never);
     const simulator = new UserSimulator(
       mockConfig,
       mockGetScreen,

@@ -19,7 +19,11 @@ import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import path from 'node:path';
 import type { Config } from '../config/config.js';
 import { EXIT_PLAN_MODE_TOOL_NAME } from './tool-names.js';
-import { validatePlanPath, validatePlanContent } from '../utils/planUtils.js';
+import {
+  validatePlanPath,
+  validatePlanContent,
+  resolvePlanPath,
+} from '../utils/planUtils.js';
 import { ApprovalMode } from '../policy/types.js';
 import { resolveToRealPath, isSubpath } from '../utils/paths.js';
 import { logPlanExecution } from '../telemetry/loggers.js';
@@ -60,11 +64,11 @@ export class ExitPlanModeTool extends BaseDeclarativeTool<
       return 'plan_filename is required.';
     }
 
-    const safeFilename = path.basename(params.plan_filename);
     const plansDir = resolveToRealPath(this.config.storage.getPlansDir());
-    const resolvedPath = path.join(
+    const resolvedPath = resolvePlanPath(
+      params.plan_filename,
       this.config.storage.getPlansDir(),
-      safeFilename,
+      this.config.getTargetDir(),
     );
 
     const realPath = resolveToRealPath(resolvedPath);
@@ -122,6 +126,7 @@ export class ExitPlanModeInvocation extends BaseToolInvocation<
     const pathError = await validatePlanPath(
       this.params.plan_filename,
       this.config.storage.getPlansDir(),
+      this.config.getTargetDir(),
     );
     if (pathError) {
       this.planValidationError = pathError;
@@ -179,8 +184,11 @@ export class ExitPlanModeInvocation extends BaseToolInvocation<
    * Note: Validation is done in validateToolParamValues, so this assumes the path is valid.
    */
   private getResolvedPlanPath(): string {
-    const safeFilename = path.basename(this.params.plan_filename);
-    return path.join(this.config.storage.getPlansDir(), safeFilename);
+    return resolvePlanPath(
+      this.params.plan_filename,
+      this.config.storage.getPlansDir(),
+      this.config.getTargetDir(),
+    );
   }
 
   async execute({ abortSignal: _signal }: ExecuteOptions): Promise<ToolResult> {

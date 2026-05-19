@@ -274,8 +274,8 @@ Look carefully at the screen and determine the CLI's current state:
 STATE 1: The agent is busy (e.g., streaming a response, executing a tool, or showing a progress message). It is actively working and NOT waiting for text input or user approval.
 - In this case, your action MUST be exactly: <WAIT>
 
-STATE 2: The agent is waiting for you to authorize a tool, confirm an action, or answer a specific multi-choice question (e.g., "Action Required", "Allow execution", numbered options, "[Y/n]").
-- In this case, your action MUST be the exact raw characters to select the option and submit it (e.g., 1\\r, 2\\r, y\\r, n\\r, or just \\r if the default option is acceptable). Do NOT output <DONE> or "Thank you". You must unblock the agent and allow it to run the tool. This state takes precedence even if timers or background messages are visible.
+STATE 2: The agent is waiting for you to authorize a tool, confirm an action, or answer a specific multi-choice/text question (which might be part of a multi-tabbed question dialog, including finalizing a list of answers on a "Review" tab or screen).
+- In this case, your action MUST be the exact raw characters to select the option and submit it (e.g., 1\\r, 2\\r, y\\r, n\\r, or just \\r if you are on a Review tab/screen to submit all answers or if the default option is acceptable). Do NOT output <DONE> or "Thank you". You must unblock the agent and allow it to run the tool. This state takes precedence even if timers or background messages are visible.
 
 STATE 3: The agent has finished its current thought process AND is idle, waiting for a NEW general text prompt (usually indicated by a "> Type your message" prompt).
 - First, verify that the ACTUAL task is fully complete based on your original goal. Do not stop at intermediate steps like planning or syntax checking.
@@ -290,8 +290,11 @@ CRITICAL RULES:
 - RULE 1: If there is a clear confirmation prompt (e.g. "[Y/n]", "1) Allow Once") or an input cursor (">"), YOU MUST RESPOND (State 2 or 3). Detect these states aggressively. Only <WAIT> (Rule 1 fallback) if the agent is truly mid-process with no interactive markers visible.
 - RULE 2: If there is an "Action Required" or confirmation prompt on the screen, YOU MUST HANDLE IT (State 2). This takes precedence over everything else.
 - RULE 3: If prompted to allow execution of a command with options like 'Allow once' and 'Allow for this session', you MUST choose the option for 'Allow for this session' (typically by sending '2\\r').
-- RULE 4: Use the "session_notes" field to record important facts that are scrolling off the screen (e.g., test results, proposed plans, file names, errors). Keep notes extremely brief. DO NOT record transient states like "Agent is thinking". This memory helps you maintain context across the session.
-- RULE 5: You MUST output a strictly formatted JSON object with no markdown wrappers or extra text.
+- RULE 4: If the agent is presenting multiple questions in a tabbed dialog (often indicated by progress/tab headers like "Question 1", "Question 2", or "Review" at the top/bottom, or a "Review your answers:" section):
+  - If you are on an individual question tab, enter the option (e.g., 1\\r, 2\\r) or type your text response followed by \\r to answer it. Answering a question will auto-advance to the next tab.
+  - If you are on the "Review" tab (indicated by "Review your answers:" or a "Review" header), you MUST send \\r (Enter) to submit and finalize the answers.
+- RULE 5: Use the "session_notes" field to record important facts that are scrolling off the screen (e.g., test results, proposed plans, file names, errors). Keep notes extremely brief. DO NOT record transient states like "Agent is thinking". This memory helps you maintain context across the session.
+- RULE 6: You MUST output a strictly formatted JSON object with no markdown wrappers or extra text.
 
 JSON FORMAT:
 {
@@ -346,9 +349,7 @@ ${strippedScreen}
         if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
           cleanJson = cleanJson.substring(startIdx, endIdx + 1);
         } else {
-          cleanJson = cleanJson
-            .replace(/^\`\`\`json\s*|\s*\`\`\`$/gm, '')
-            .trim();
+          cleanJson = cleanJson.replace(/^```json\s*|\s*```$/gm, '').trim();
         }
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
         parsedJson = JSON.parse(cleanJson) as SimulatorResponse;
@@ -372,7 +373,7 @@ ${strippedScreen}
           /^\d+\\r$/.test(text) ||
           text === '\\r'
         ) {
-          responseText = text.replace(/^[\`\"']+|[\`\"']+$/g, '');
+          responseText = text.replace(/^[`"']+|[`"']+/g, '');
         } else {
           responseText = ''; // Prevent typing broken JSON string
         }
@@ -436,22 +437,25 @@ ${strippedScreen}
           );
         }
 
-        if (false) /* Disabled dynamic knowledge generation for evaluation stability */ {
-          const newKnowledge = `- ${parsedJson.new_rule}\n`;
+        // eslint-disable-next-line no-constant-condition
+        if (false) {
+          /* Disabled dynamic knowledge generation for evaluation stability */ const newKnowledge = `- ${parsedJson.new_rule}\n`;
           this.knowledgeBase += newKnowledge;
-          try {
-            fs.appendFileSync(this.editableKnowledgeFile, newKnowledge);
-            debugLogger.log(
-              `[SIMULATOR] Saved new knowledge to ${this.editableKnowledgeFile}`,
-            );
-            if (this.interactionsFile) {
-              fs.appendFileSync(
-                this.interactionsFile,
-                `[LOG] [SIMULATOR] Saved new knowledge to ${this.editableKnowledgeFile}\n\n`,
-              );
+          const file = this.editableKnowledgeFile;
+          if (file) {
+            try {
+              fs.appendFileSync(file!, newKnowledge);
+              debugLogger.log(`[SIMULATOR] Saved new knowledge to ${file}`);
+              const interactions = this.interactionsFile;
+              if (interactions) {
+                fs.appendFileSync(
+                  interactions!,
+                  `[LOG] [SIMULATOR] Saved new knowledge to ${file}\n\n`,
+                );
+              }
+            } catch (e) {
+              debugLogger.error(`Failed to append knowledge`, e);
             }
-          } catch (e) {
-            debugLogger.error(`Failed to append knowledge`, e);
           }
         }
 

@@ -27,6 +27,7 @@ import { buildFilePathArgsPattern } from '../policy/utils.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { ToolErrorType } from './tool-error.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
+import { resolvePlanPath } from '../utils/planUtils.js';
 import { isNodeError } from '../utils/errors.js';
 import { correctPath } from '../utils/pathCorrector.js';
 import type { Config } from '../config/config.js';
@@ -465,10 +466,10 @@ class EditToolInvocation
       () => this.config.getApprovalMode(),
     );
     if (this.config.isPlanMode()) {
-      const safeFilename = path.basename(this.params.file_path);
-      this.resolvedPath = path.join(
+      this.resolvedPath = resolvePlanPath(
+        this.params.file_path,
         this.config.storage.getPlansDir(),
-        safeFilename,
+        this.config.getTargetDir(),
       );
     } else if (!path.isAbsolute(this.params.file_path)) {
       const result = correctPath(this.params.file_path, this.config);
@@ -1054,7 +1055,13 @@ export class EditTool
     }
 
     let resolvedPath: string;
-    if (!path.isAbsolute(params.file_path)) {
+    if (this.config.isPlanMode()) {
+      resolvedPath = resolvePlanPath(
+        params.file_path,
+        this.config.storage.getPlansDir(),
+        this.config.getTargetDir(),
+      );
+    } else if (!path.isAbsolute(params.file_path)) {
       const result = correctPath(params.file_path, this.config);
       if (result.success) {
         resolvedPath = result.correctedPath;

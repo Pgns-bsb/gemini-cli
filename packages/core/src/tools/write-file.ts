@@ -29,6 +29,7 @@ import {
 import { buildFilePathArgsPattern } from '../policy/utils.js';
 import { ToolErrorType } from './tool-error.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
+import { resolvePlanPath } from '../utils/planUtils.js';
 import { getErrorMessage, isNodeError } from '../utils/errors.js';
 import { ensureCorrectFileContent } from '../utils/editCorrector.js';
 import { detectLineEnding } from '../utils/textUtils.js';
@@ -168,10 +169,10 @@ class WriteFileToolInvocation extends BaseToolInvocation<
     );
 
     if (this.config.isPlanMode()) {
-      const safeFilename = path.basename(this.params.file_path);
-      this.resolvedPath = path.join(
+      this.resolvedPath = resolvePlanPath(
+        this.params.file_path,
         this.config.storage.getPlansDir(),
-        safeFilename,
+        this.config.getTargetDir(),
       );
     } else {
       this.resolvedPath = path.resolve(

@@ -23,6 +23,67 @@ export const PlanErrorMessages = {
 } as const;
 
 /**
+ * Safely resolves a plan path within the plans directory, preserving subdirectories
+ * if they are within the plans directory context.
+ *
+ * @param planPath The input file path for the plan.
+ * @param plansDir The authorized project plans directory.
+ * @param targetDir The project root directory.
+ * @returns The resolved safe absolute path.
+ */
+export function resolvePlanPath(
+  planPath: string,
+  plansDir: string,
+  targetDir: string = process.cwd(),
+): string {
+  const realPlansDir = resolveToRealPath(plansDir);
+  const plansDirName = path.basename(plansDir);
+
+  let normalizedPlanPath = planPath;
+  if (!path.isAbsolute(planPath)) {
+    const segments = planPath.split(/[\\/]+/);
+    if (segments.length > 1 && segments[0] === plansDirName) {
+      normalizedPlanPath = segments.slice(1).join(path.sep);
+    }
+  }
+
+  // 1. Try resolving relative to project root (targetDir)
+  const resolved = path.isAbsolute(normalizedPlanPath)
+    ? normalizedPlanPath
+    : path.resolve(targetDir, normalizedPlanPath);
+
+  try {
+    const realResolved = resolveToRealPath(resolved);
+    if (isSubpath(realPlansDir, realResolved)) {
+      return resolved;
+    }
+  } catch {
+    const directResolved = path.resolve(resolved);
+    if (isSubpath(realPlansDir, directResolved)) {
+      return resolved;
+    }
+  }
+
+  // 2. Try resolving relative to plansDir
+  const nestedResolved = path.resolve(plansDir, normalizedPlanPath);
+  try {
+    const realNested = resolveToRealPath(nestedResolved);
+    if (isSubpath(realPlansDir, realNested)) {
+      return nestedResolved;
+    }
+  } catch {
+    const directNested = path.resolve(nestedResolved);
+    if (isSubpath(realPlansDir, directNested)) {
+      return nestedResolved;
+    }
+  }
+
+  // 3. Fallback to standard safe behavior (basename) to avoid traversal
+  const safeFilename = path.basename(planPath);
+  return path.join(plansDir, safeFilename);
+}
+
+/**
  * Validates a plan file path for safety (traversal) and existence.
  * @param planPath The untrusted path to the plan file.
  * @param plansDir The authorized project plans directory.
@@ -32,9 +93,9 @@ export const PlanErrorMessages = {
 export async function validatePlanPath(
   planPath: string,
   plansDir: string,
+  targetDir?: string,
 ): Promise<string | null> {
-  const safeFilename = path.basename(planPath);
-  const resolvedPath = path.join(plansDir, safeFilename);
+  const resolvedPath = resolvePlanPath(planPath, plansDir, targetDir);
   const realPath = resolveToRealPath(resolvedPath);
   const realPlansDir = resolveToRealPath(plansDir);
 
